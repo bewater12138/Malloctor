@@ -304,7 +304,7 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 		else
 		{	//分配失败，执行后续操作
 			//没有足够的空间，扩容堆区
-			IncreaseHeap(heap, aim_region->regionSize, aim_region);
+			IncreaseHeap(heap, aim_region->regionSize >= size + sizeof(struct VarBlockHead) ? aim_region->regionSize : size + sizeof(struct VarBlockHead), aim_region);
 			goto ALLOC;
 		}
 
