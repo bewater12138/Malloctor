@@ -1,5 +1,4 @@
 #include "Heap.h"
-#include "stdio.h"
 
 const SIZE heapRegionsSize = sizeof(struct RegionInfo) * InitRegionMaxCount;
 const SIZE heapSize2RegionTableSize = sizeof(struct Addr2Region) * InitRegionMaxCount;
@@ -146,22 +145,11 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 
 	MakeAddr2Region(((struct Addr2Region*)h->addr2RegionTable.arr) + region_count - 1,  ((struct RegionInfo*)h->regions.arr) + region_count - 1, ((struct RegionInfo*)h->regions.arr) + region_count - 1);
 
-
-	//打印调试信息
-	for (INT i = 0; i < region_count; ++i)
-	{
-		struct RegionInfo* rinfo = &((struct RegionInfo*)h->regions.arr)[i];
-		printf("block %d  regionaddr: %p blockaddr: %p regionsize: %d blocksize: %d\n", i, rinfo->regionBegin, rinfo->blockBegin, rinfo->regionSize, rinfo->blockSize);
-	}
-
 	return 0;
 }
 
-//调试变量
-int incr = 0;
 EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct RegionInfo* region)
 {
-	incr = 1;
 	//调用sbrk函数
 	sbrk(increase_size);
 
@@ -198,7 +186,6 @@ EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct Regio
 		MakeAddr2Region(&addr2region, &new_region, main_region);
 		AddArrayElement(&heap->addr2RegionTable, &addr2region, sizeof(addr2region));
 
-		printf("heap increased: block_size=dynamic region=%p size=%d\n", new_region.regionBegin, new_region.regionSize);
 	}
 	else
 	{
@@ -227,7 +214,6 @@ EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct Regio
 		MakeAddr2Region(GetArrayEnd(&heap->addr2RegionTable, sizeof(struct Addr2Region)), &new_region, region);
 		heap->addr2RegionTable.count++;
 
-		printf("heap increased: block_size=%d region=%p size=%d\n", new_region.blockSize, new_region.regionBegin, new_region.regionSize);;
 	}
 
 	return 0;
@@ -314,7 +300,6 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 		if (ret)
 		{
 			aim_region->vfirst->last = 0;
-			printf("malloc %p size %d need %d\n", ret, cur->size, size);
 		}
 		else
 		{	//分配失败，执行后续操作
@@ -369,7 +354,6 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 		ret = aim_region->first->aim;
 		aim_region->first->aim = 0;	//分配后的节点，将指向设为0，表示已经被分配
 		aim_region->first = aim_region->first->next;
-		printf("malloc %p size %d need %d\n", ret, aim_region->blockSize, size);
 	}
 
 	return ret;
@@ -426,7 +410,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 
 	if (!aim_addr2region)
 	{	//不是堆区中的地址
-		printf("failed free %p\n", ptr);
 		return;
 	}
 
@@ -438,7 +421,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 		SIZE size = aim_node->size;
 		if (!aim_node->used)
 		{
-			printf("error free(maybe repeat free) %p\n", ptr);
 			return;
 		}
 
@@ -485,7 +467,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 					back_node->frontSize = front_node->size;
 				}
 
-				printf("free %p size:%d three2one\n", ptr, size);
 				return;
 			}
 			else
@@ -494,7 +475,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 				//修改合并后，相邻的下一个内存块
 				back_node->frontSize = front_node->size;
 
-				printf("free %p size:%d two2one\n", ptr, size);
 				return;
 			}
 		}
@@ -541,14 +521,12 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 				back_node->frontSize = aim_node->size;
 			}
 
-			printf("free %p size:%d two2one\n", ptr, size);
 			return;
 		}
 
 		//添加到空闲链表
 		if (!aim_node->used)
 		{
-			printf("error free(maybe repeat free) %p\n", ptr);
 			return;
 		}
 
@@ -559,8 +537,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			var_region->vfirst->last = aim_node;
 		var_region->vfirst = aim_node;
 
-		//打印调试信息
-		printf("free %p size:%d \n", ptr, size);
 		return;
 	}
 	else
@@ -580,19 +556,15 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 
 			if (aim_node->aim != 0)
 			{
-				printf("error free(maybe repeat free) %p\n", ptr);
 				return;
 			}
 			aim_node->aim = ptr;
 			aim_node->next = aim_addr2region->mainRegion->first;	//添加到空闲节点链表的头部
 			aim_addr2region->mainRegion->first = aim_node;
 
-			//打印调试信息
-			printf("free %p blocksize: %d\n", ptr, aim_addr2region->region.blockSize);
 
 			return;
 		}
 	}
 
-	printf("failed free %p\n", ptr);
 }
