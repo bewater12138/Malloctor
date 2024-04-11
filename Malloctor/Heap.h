@@ -2,7 +2,7 @@
 
 typedef void* PTR;
 
-#ifdef maros
+#ifdef _32Bit
 typedef __int32 INTPTR;
 #else
 typedef __int64 INTPTR;
