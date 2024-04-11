@@ -1,7 +1,7 @@
 #pragma once
 
 typedef void* PTR;
-#ifdef WIN32
+#ifdef _32Bit
 typedef __int32 INTPTR;
 #else
 typedef __int64 INTPTR;
