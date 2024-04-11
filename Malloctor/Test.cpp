@@ -3,8 +3,6 @@
 #include <vector>
 #include <iostream>
 
-extern"C" int incr;
-
 //分配、回收和扩容
 void test1()
 {
@@ -16,8 +14,6 @@ void test1()
 	while (i--)
 	{
 		auto p = _Malloc(heap, 1024);
-		if (incr)
-			_Free(heap, p);
 	}
 
 
