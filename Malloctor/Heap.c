@@ -9,6 +9,10 @@ STATIC_FUNC void Default_Callback_IncreaseHeap(struct Heap* heap, PTR new_region
 STATIC_FUNC void Default_Callback_RegionTableOverflow(struct Heap* heap) {}
 STATIC_FUNC void Default_Callback_FailedMalloc(struct Heap* heap, SIZE size) {}
 STATIC_FUNC SIZE Default_Callback_FailedIncreaseHeap(struct Heap* heap, SIZE heap_size, SIZE apply_size) { return 0; }
+#ifdef DEBUG
+STATIC_FUNC void Default_Callback_Malloc(struct Heap* heap, PTR addr, SIZE size) {}
+STATIC_FUNC void Default_Callback_Free(struct Heap* heap, PTR addr, SIZE size) {}
+#endif
 
 STATIC_FUNC INT MemIn(PTR region, SIZE region_size, PTR where)
 {
@@ -66,6 +70,11 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 	h->callback_failedMalloc = Default_Callback_FailedMalloc;
 	h->callback_increaseHeap = Default_Callback_IncreaseHeap;
 	h->callback_regionTableOverflow = Default_Callback_RegionTableOverflow;
+#ifdef DEBUG
+	h->callback_malloc = Default_Callback_Malloc;
+	h->callback_free = Default_Callback_Free;
+#endif
+
 
 	//初始化数组
 	PTR space_mem = (INTPTR)addr + sizeof(struct Heap);
@@ -397,6 +406,9 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 		aim_region->first = aim_region->first->next;
 	}
 
+#ifdef DEBUG
+	heap->callback_malloc(heap, ret, size);
+#endif
 	return ret;
 }
 
@@ -497,6 +509,9 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 					back_node->frontSize = front_node->size;
 				}
 
+#ifdef DEBUG
+				heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
+#endif
 				return;
 			}
 			else
@@ -508,6 +523,9 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 					back_node->frontSize = front_node->size;
 				}
 
+#ifdef DEBUG
+				heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
+#endif
 				return;
 			}
 		}
@@ -534,6 +552,9 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 				back_node->frontSize = aim_node->size;
 			}
 
+#ifdef DEBUG
+			heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
+#endif
 			return;
 		}
 		//都不空闲
@@ -546,6 +567,10 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			if (var_region->vfirst)
 				var_region->vfirst->last = aim_node;
 			var_region->vfirst = aim_node;
+
+#ifdef DEBUG
+			heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
+#endif
 			return;
 		}
 	}
@@ -557,6 +582,7 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 		if (offset % aim_addr2region->region.blockSize)
 		{
 			heap->callback_errorFreeAddr(heap, ptr);
+			return;
 		}
 		else
 		{
@@ -572,7 +598,9 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			aim_node->next = aim_addr2region->mainRegion->first;	//添加到空闲节点链表的头部
 			aim_addr2region->mainRegion->first = aim_node;
 
-
+			#ifdef DEBUG
+				heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
+			#endif
 			return;
 		}
 	}

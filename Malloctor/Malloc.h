@@ -1,5 +1,11 @@
 #pragma once
 
+#ifdef _MSC_BUILD
+	#ifdef _DEBUG
+		#define DEBUG
+	#endif
+#endif
+
 typedef void* PTR;
 
 #ifdef _32Bit
@@ -73,7 +79,10 @@ typedef void(*Callback_FailedMalloc)(struct Heap* heap, SIZE size);
 /*apply_size:申请的增量
 返回值:允许的增量*/
 typedef SIZE(*Callback_FailedIncreaseHeap)(struct Heap* heap, SIZE heap_size, SIZE apply_size);
-
+#ifdef DEBUG
+typedef void(*Callback_Malloc)(struct Heap* heap, PTR addr, SIZE size);
+typedef void(*Callback_Free)(struct Heap* heap, PTR addr, SIZE size);
+#endif
 
 /*
 为堆区添加内存时，会将新的内存区构造为相应的链表，并将这个链表连接到对应的原内存分区上，
@@ -120,6 +129,10 @@ struct Heap
 	Callback_FailedIncreaseHeap		callback_failedIncreaseHeap;		//堆扩容失败
 	Callback_RegionTableOverflow	callback_regionTableOverflow;		//区域表溢出（致命错误）
 	Callback_FailedMalloc			callback_failedMalloc;				//分配失败
+#ifdef DEBUG
+	Callback_Malloc					callback_malloc;					//分配内存
+	Callback_Free					callback_free;						//释放内存
+#endif
 };
 
 enum HeapType

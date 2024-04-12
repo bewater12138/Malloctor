@@ -99,8 +99,67 @@ void test4()
 	_Free(heap, 0);
 }
 
+struct Heap* g_h;
+template<class C>
+class myalloctor
+{
+public:
+	using _From_primary = myalloctor;
+	using value_type = C;
+	using size_type = size_t;
+	using difference_type = ptrdiff_t;
+
+	constexpr myalloctor()noexcept {}
+	constexpr myalloctor(const myalloctor&) = default;
+	template<class Other>
+	constexpr myalloctor(const myalloctor<Other>&)noexcept {}
+	constexpr ~myalloctor()noexcept {}
+	constexpr myalloctor& operator=(const myalloctor<C>&) = default;
+
+	constexpr void deallocate(C* const _Ptr, const size_t _Count)
+	{
+		_Free(g_h, _Ptr);
+	}
+	C* allocate(const size_t _Count)
+	{
+		return (C*)_Malloc(g_h, _Count * sizeof(C));
+	}
+};
+
+//用stl容器测试
+void test5()
+{
+	g_h = (struct Heap*)malloc(64 * 1024 * 1024);
+	ConstructHeap(g_h, 32 * 1024 * 1024, HeapType_Default);
+	g_h->callback_malloc = [](Heap* h,void* p,SIZE size) {
+		std::cout << "malloc size=" << size << "  addr=" << p << "\n";
+		};
+	g_h->callback_free = [](Heap* h,void* p,SIZE size) {
+		if (size == dynamicSize)
+			std::cout << "free dynamicBlock " << p << "  size=" << size <<"\n";
+		else
+			std::cout << "free " << p << "  size=" << size <<"\n";
+		};
+
+	{
+		std::cout << "构造 string\n";
+		std::basic_string<char, std::char_traits<char>, myalloctor<char>> str;
+	};
+	std::cout << "析构 string\n\n";
+
+	std::basic_string<char, std::char_traits<char>, myalloctor<char>> str;
+	while (true)
+	{
+		std::cout << "\n\n";
+		std::string temp;
+		std::cin >> temp;
+		str += temp;
+		std::cout << "str=" << str;
+	}
+}
+
 int main()
 {
-	test4();
+	test5();
 	return 0;
 }
