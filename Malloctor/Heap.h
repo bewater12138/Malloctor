@@ -210,6 +210,7 @@ enum HeapType
 {
 	HeapType_Default = 0,	//默认
 	HeapType_64B = 1,		//定长块只有64字节区（占比1/2）
+	HeapType_Var = 2,		//变长块区域占7/8
 };
 
 #define HeapSizeTooLess		1	//内存过少

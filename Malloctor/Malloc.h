@@ -59,9 +59,9 @@ struct RegionInfo
 		struct BlockNode* last;
 		struct VarBlockHead* vlast;
 	};
-	PTR regionBegin;	//在Heap::regions中表示所有相同块大小的分区的总大小，allBlockSize同理
+	PTR regionBegin;	
 	PTR blockBegin;
-	SIZE regionSize;
+	SIZE regionSize;	//在Heap::regions中表示所有相同块大小的分区的总大小，allBlockSize同理
 	SIZE allBlockSize;
 };
 const SIZE unusedSize = 0;
@@ -84,10 +84,6 @@ typedef void(*Callback_Malloc)(struct Heap* heap, PTR addr, SIZE size);
 typedef void(*Callback_Free)(struct Heap* heap, PTR addr, SIZE size);
 #endif
 
-/*
-为堆区添加内存时，会将新的内存区构造为相应的链表，并将这个链表连接到对应的原内存分区上，
-最后在size2RegionTable表中添加该区域的信息（首尾节点指针不使用，只记录内存区域的大小和位置信息）
-*/
 struct Heap
 {
 	/*
