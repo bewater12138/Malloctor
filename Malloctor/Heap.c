@@ -508,11 +508,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 				{
 					back_node->frontSize = front_node->size;
 				}
-
-#ifdef DEBUG
-				heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
-#endif
-				return;
 			}
 			else
 			{
@@ -522,11 +517,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 				{
 					back_node->frontSize = front_node->size;
 				}
-
-#ifdef DEBUG
-				heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
-#endif
-				return;
 			}
 		}
 		//如果后面是空闲内存块
@@ -551,11 +541,6 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			{
 				back_node->frontSize = aim_node->size;
 			}
-
-#ifdef DEBUG
-			heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
-#endif
-			return;
 		}
 		//都不空闲
 		else
@@ -567,12 +552,12 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			if (var_region->vfirst)
 				var_region->vfirst->last = aim_node;
 			var_region->vfirst = aim_node;
+		}
 
 #ifdef DEBUG
-			heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
+		heap->callback_free(heap, ptr, aim_addr2region->mainRegion->blockSize);
 #endif
-			return;
-		}
+		return;
 	}
 	else
 	{
