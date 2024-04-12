@@ -3,7 +3,14 @@
 const SIZE heapRegionsSize = sizeof(struct RegionInfo) * InitRegionMaxCount;
 const SIZE heapSize2RegionTableSize = sizeof(struct Addr2Region) * InitRegionMaxCount;
 
-INLINE_FUNC INT MemIn(PTR region, SIZE region_size, PTR where)
+STATIC_FUNC void Default_Callback_ErrorFreeAddr(struct Heap* heap, PTR addr) {}
+STATIC_FUNC void Default_Callback_AddrTransborder(struct Heap* heap, PTR addr) {}
+STATIC_FUNC void Default_Callback_IncreaseHeap(struct Heap* heap, PTR new_region_addr, SIZE new_region_size, SIZE block_size) {}
+STATIC_FUNC void Default_Callback_RegionTableOverflow(struct Heap* heap) {}
+STATIC_FUNC void Default_Callback_FailedMalloc(struct Heap* heap, SIZE size) {}
+STATIC_FUNC SIZE Default_Callback_FailedIncreaseHeap(struct Heap* heap, SIZE heap_size, SIZE apply_size) { return 0; }
+
+STATIC_FUNC INT MemIn(PTR region, SIZE region_size, PTR where)
 {
 	return region <= where && (INTPTR)region + region_size > where;
 }
@@ -13,7 +20,7 @@ EXTERN_FUNC void* sbrk(SIZE increment)
 	return 0;
 }
 
-INLINE_FUNC void MakeRegionList(struct RegionInfo* region)
+STATIC_FUNC void MakeRegionList(struct RegionInfo* region)
 {
 	INT node_count = region->regionSize / (sizeof(struct BlockNode) + region->blockSize);
 
@@ -53,6 +60,12 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 
 	struct Heap* h = (struct Heap*)addr;
 	h->size = heap_size;
+	h->callback_addrTransborder = Default_Callback_AddrTransborder;
+	h->callback_errorFreeAddr = Default_Callback_ErrorFreeAddr;
+	h->callback_failedIncreaseHeap = Default_Callback_FailedIncreaseHeap;
+	h->callback_failedMalloc = Default_Callback_FailedMalloc;
+	h->callback_increaseHeap = Default_Callback_IncreaseHeap;
+	h->callback_regionTableOverflow = Default_Callback_RegionTableOverflow;
 
 	//初始化数组
 	PTR space_mem = (INTPTR)addr + sizeof(struct Heap);
@@ -150,6 +163,12 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 
 EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct RegionInfo* region)
 {
+	if (heap->addr2RegionTable.count == heap->addr2RegionTable.capacity)
+	{
+		heap->callback_regionTableOverflow(heap);
+		return 1;
+	}
+
 	//调用sbrk函数
 	sbrk(increase_size);
 
@@ -186,6 +205,7 @@ EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct Regio
 		MakeAddr2Region(&addr2region, &new_region, main_region);
 		AddArrayElement(&heap->addr2RegionTable, &addr2region, sizeof(addr2region));
 
+		heap->callback_increaseHeap(heap, new_region_beg, new_region.regionSize, new_region.blockSize);
 	}
 	else
 	{
@@ -214,6 +234,7 @@ EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct Regio
 		MakeAddr2Region(GetArrayEnd(&heap->addr2RegionTable, sizeof(struct Addr2Region)), &new_region, region);
 		heap->addr2RegionTable.count++;
 
+		heap->callback_increaseHeap(heap, new_region_beg, new_region.regionSize, new_region.blockSize);
 	}
 
 	return 0;
@@ -345,7 +366,7 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 			INT error = IncreaseHeap(heap, aim_region->regionSize, aim_region);
 			if (error)
 			{
-
+				heap->callback_failedMalloc(heap, size);
 				return 0;
 			}
 			goto ALLOC2;
@@ -410,6 +431,7 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 
 	if (!aim_addr2region)
 	{	//不是堆区中的地址
+		heap->callback_addrTransborder(heap, ptr);
 		return;
 	}
 
@@ -546,7 +568,7 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 		//如果模数不为0，则不是正确的堆地址
 		if (offset % aim_addr2region->region.blockSize)
 		{
-
+			heap->callback_errorFreeAddr(heap, ptr);
 		}
 		else
 		{

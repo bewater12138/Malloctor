@@ -4,10 +4,11 @@ typedef void* PTR;
 
 #ifdef _32Bit
 typedef __int32 INTPTR;
+typedef __int32 SIZE;
 #else
 typedef __int64 INTPTR;
+typedef __int64 SIZE;
 #endif
-typedef __int32 SIZE;
 typedef char CHAR;
 typedef __int32 INT;
 typedef unsigned __int32 UINT;
@@ -136,6 +137,17 @@ INLINE_FUNC void MakeAddr2Region(PTR where, struct RegionInfo* region_ptr, struc
 }
 EXTERN_FUNC struct Addr2Region* Addr2HeapRegion(struct Heap* heap, PTR ptr);
 
+typedef void(*Callback_ErrorFreeAddr)(struct Heap* heap, PTR addr);
+typedef void(*Callback_AddrTransborder)(struct Heap* heap, PTR addr);
+typedef void(*Callback_IncreaseHeap)(struct Heap* heap, PTR new_region_addr, SIZE new_region_size, SIZE block_size);
+typedef void(*Callback_RegionTableOverflow)(struct Heap* heap);
+typedef void(*Callback_FailedMalloc)(struct Heap* heap, SIZE size);
+/*
+apply_size:申请的增量
+返回值:允许的增量
+*/
+typedef SIZE(*Callback_FailedIncreaseHeap)(struct Heap* heap, SIZE heap_size, SIZE apply_size);
+
 /*
 为堆区添加内存时，会将新的内存区构造为相应的链表，并将这个链表连接到对应的原内存分区上，
 最后在size2RegionTable表中添加该区域的信息（首尾节点指针不使用，只记录内存区域的大小和位置信息）
@@ -154,16 +166,28 @@ struct Heap
 
 	/*
 	Element Type: RegionInfo
-	以分区地址为序
+	以内存块大小为序，存储每个内存区域的主区域
+	构造时产生的区域均为主区域，所有块节点均挂载到主区域链表上
+	扩容时新增的区域为子区域，只负责记录区域的地址大小等信息，不负责管理节点
 	*/
 	struct Array regions;
 
 	/*
-	Element Type: Size2Region
-	内存块大小到内存分区的映射表（只映射其中一个符合条件的内存分区）
-	以分区的块大小为序
+	Element Type: Addr2Region
+	内存地址到内存区域的映射表
+	以分区起始地址为序
 	*/
 	struct Array addr2RegionTable;
+
+	/*
+	回调函数表
+	*/
+	Callback_ErrorFreeAddr			callback_errorFreeAddr;				//释放错误地址
+	Callback_AddrTransborder		callback_addrTransborder;			//释放地址越界
+	Callback_IncreaseHeap			callback_increaseHeap;				//堆扩容
+	Callback_FailedIncreaseHeap		callback_failedIncreaseHeap;		//堆扩容失败
+	Callback_RegionTableOverflow	callback_regionTableOverflow;		//区域表溢出（致命错误）
+	Callback_FailedMalloc			callback_failedMalloc;				//分配失败
 };
 
 enum HeapType

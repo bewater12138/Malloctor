@@ -1,14 +1,17 @@
 #pragma once
 
 typedef void* PTR;
+
 #ifdef _32Bit
 typedef __int32 INTPTR;
+typedef __int32 SIZE;
 #else
 typedef __int64 INTPTR;
+typedef __int64 SIZE;
 #endif
-typedef __int32 SIZE;
 typedef char CHAR;
 typedef __int32 INT;
+typedef unsigned __int32 UINT;
 
 enum HeapType
 {
