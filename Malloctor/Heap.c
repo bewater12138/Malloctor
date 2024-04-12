@@ -122,12 +122,25 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 		every_region_block_size[7] = dynamicSize;
 	}
 		break;
+	case HeapType_64B: {
+		region_count = 2;
+		h->maxBlockSize = 64;
+		SIZE left_size = (INTPTR)addr + heap_size - (INTPTR)space_mem;
+		every_region_size[0] = left_size / 2;
+		every_region_size[1] = left_size - left_size / 2;
+
+		every_region_block_size[0] = 64;
+		every_region_block_size[1] = dynamicSize;
+	}
+		break;
 	default:return UnknowHeapType;
 	}
 
 	//设置每一个分区的区域信息
 	h->regions.count = region_count;
+	h->regions.capacity = InitRegionMaxCount;
 	h->addr2RegionTable.count = region_count;
+	h->addr2RegionTable.capacity = InitRegionMaxCount;
 	PTR current_ptr = space_mem;
 	for (INT i = 0; i < region_count; ++i)
 	{
@@ -155,8 +168,17 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 	rinfo->vfirst->size = rinfo->regionSize - sizeof(struct VarBlockHead);
 	rinfo->vfirst->last = 0;
 	rinfo->vfirst->next = 0;
-
 	MakeAddr2Region(((struct Addr2Region*)h->addr2RegionTable.arr) + region_count - 1,  ((struct RegionInfo*)h->regions.arr) + region_count - 1, ((struct RegionInfo*)h->regions.arr) + region_count - 1);
+
+	//设置变长区域虚拟首部和尾部
+	h->vnodes.virtual_first.next = rinfo->vfirst;
+	rinfo->vfirst->last = &h->vnodes.virtual_first;
+	h->vnodes.virtual_last.last = rinfo->vlast;
+	rinfo->vlast->next = &h->vnodes.virtual_last;
+	h->vnodes.virtual_last.size = 0;
+	h->vnodes.virtual_last.next = 0;
+	h->vnodes.virtual_first.size = 0;
+	h->vnodes.virtual_first.last = 0;
 
 	return 0;
 }
@@ -169,7 +191,7 @@ EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct Regio
 		return 1;
 	}
 
-	//调用sbrk函数
+	//调用sbrk函数，因为sbrk为空实现，所以暂时不加判断
 	sbrk(increase_size);
 
 	PTR new_region_beg = (INTPTR)heap + heap->size;
@@ -194,12 +216,15 @@ EXTERN_FUNC INT IncreaseHeap(struct Heap* heap, SIZE increase_size, struct Regio
 		new_region.vfirst->last = 0;
 		new_region.vfirst->next = 0;
 
-		//与主区域链表合并
+		//与主区域链表合并，添加为第一个节点
+		struct VarBlockHead* new_node = new_region.vfirst;
 		struct RegionInfo* main_region = ((struct RegionInfo*)heap->regions.arr) + heap->regions.count - 1;
-		new_region.vfirst->next = main_region->vfirst;
+		heap->vnodes.virtual_first.next = new_node;
+		new_node->last = &heap->vnodes.virtual_first;
+		new_node->next = main_region->vfirst;
 		if (main_region->vfirst)
-			main_region->vfirst->last = new_region.vlast;
-		main_region->vfirst = new_region.vfirst;
+			main_region->vfirst->last = new_node;
+		main_region->vfirst = new_node;
 
 		struct Addr2Region addr2region;
 		MakeAddr2Region(&addr2region, &new_region, main_region);
@@ -259,10 +284,11 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 		while (cur)
 		{
 			//内存块大到足以继续分割
-			if (cur->size > size + sizeof(struct VarBlockHead))
+			//判断依据，分割后的新块至少要为最大定长块的两倍
+			if (cur->size >= size + sizeof(struct VarBlockHead) + (heap->maxBlockSize<<1))
 			{
 				ret = GetBlockAim(cur);
-
+				 
 				//分割内存块
 				struct VarBlockHead* split_block_node = (INTPTR)ret + size;
 				split_block_node->used = 0;
@@ -270,21 +296,15 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 				split_block_node->size = cur->size - size - sizeof(struct VarBlockHead);
 				split_block_node->next = cur->next;
 				split_block_node->last = cur->last;
-
+				cur->last->next = split_block_node;
+				cur->next->last = split_block_node;
 				cur->used = 1;
 				cur->size = size;
-				if (cur->last)
-				{
-					cur->last->next = split_block_node;
-				}
-				else  //是头节点的话，就要直接修改区域信息中的头指针
+
+				//如果分配出去的是头节点，要修改链表首部
+				if (cur == aim_region->vfirst)
 				{
 					aim_region->vfirst = split_block_node;
-				}
-
-				if (cur->next)
-				{
-					split_block_node->next->last = split_block_node;
 				}
 
 				//修改内存上相邻的下一个内存块的首部
@@ -320,7 +340,7 @@ EXTERN_FUNC PTR _Malloc(struct Heap* heap, SIZE size)
 
 		if (ret)
 		{
-			aim_region->vfirst->last = 0;
+			
 		}
 		else
 		{	//分配失败，执行后续操作
@@ -420,6 +440,7 @@ EXTERN_FUNC struct Addr2Region* Addr2HeapRegion(struct Heap* heap, PTR ptr)
 
 			break;
 		}
+		if (left > right)break;
 	}
 	return aim;
 }
@@ -440,13 +461,13 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 		struct RegionInfo* var_region = aim_addr2region->mainRegion;
 
 		struct VarBlockHead* aim_node = Ptr2VarBlock(ptr);
-		SIZE size = aim_node->size;
 		if (!aim_node->used)
 		{
+			heap->callback_errorFreeAddr(heap, ptr);
 			return;
 		}
 
-		//合并前后空闲内存块
+		//尝试合并前后空闲内存块
 		struct VarBlockHead* back_node =GetBackVarBlock(aim_node);
 		INT have_back_node = MemIn(aim_addr2region->region.blockBegin, aim_addr2region->region.allBlockSize, back_node);
 		INT back_node_free = have_back_node && !back_node->used;
@@ -465,22 +486,9 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			{
 				//前后都为空闲，将三个内存块合并，合并后为front_node
 				front_node->size += (aim_node->size + back_node->size + (sizeof(struct VarBlockHead) << 1));
-
-				//从链表移除back_node
-				if (back_node->last)
-				{
-					if(back_node->next)
-						RemoveVarBlockHead_Unchecked(back_node);
-					else
-					{
-						back_node->last->next = 0;
-					}
-				}
-				else
-				{
-					var_region->vfirst = back_node->next;
-					var_region->vfirst->last = 0;
-				}
+				RemoveVarBlockHead_Unchecked(back_node);
+				if (back_node == var_region->vfirst)
+					var_region->vfirst = front_node;
 
 				//修改合并后，相邻的下一个内存块
 				back_node = GetBackVarBlock(front_node);
@@ -495,45 +503,28 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 			{
 				front_node->size += (aim_node->size + sizeof(struct VarBlockHead));
 				//修改合并后，相邻的下一个内存块
-				back_node->frontSize = front_node->size;
+				if (MemIn(aim_addr2region->region.blockBegin, aim_addr2region->region.allBlockSize, back_node))
+				{
+					back_node->frontSize = front_node->size;
+				}
 
 				return;
 			}
 		}
+		//如果后面是空闲内存块
 		else if(back_node_free)
 		{
 			//与相邻节点合并
 			aim_node->size += (back_node->size + sizeof(struct VarBlockHead));
 			aim_node->next = back_node->next;
 			aim_node->last = back_node->last;
+			back_node->next->last = aim_node;
+			back_node->last->next = aim_node;
 			aim_node->used = 0;
 
-			//移除内存相邻节点
-			if (aim_node->next)
+			if (back_node == var_region->vfirst)
 			{
-				aim_node->next->last = aim_node;
-				if (aim_node->last)
-				{
-					aim_node->last->next = aim_node;
-					RemoveVarBlockHead_Unchecked(back_node);
-				}
-				else
-				{
-					var_region->vfirst = aim_node;
-					var_region->vfirst->last = 0;
-				}
-			}
-			else
-			{
-				if (aim_node->last)
-				{
-					aim_node->last->next = aim_node;
-				}
-				else
-				{
-					var_region->vfirst = aim_node;
-					var_region->vfirst->last = 0;
-				}
+				var_region->vfirst = aim_node;
 			}
 
 			//修改合并后，相邻的下一个内存块
@@ -545,21 +536,18 @@ EXTERN_FUNC void _Free(struct Heap* heap, PTR ptr)
 
 			return;
 		}
-
-		//添加到空闲链表
-		if (!aim_node->used)
+		//都不空闲
+		else
 		{
+			aim_node->used = 0;
+			aim_node->last = &heap->vnodes.virtual_first;
+			aim_node->next = var_region->vfirst;
+			heap->vnodes.virtual_first.next = aim_node;
+			if (var_region->vfirst)
+				var_region->vfirst->last = aim_node;
+			var_region->vfirst = aim_node;
 			return;
 		}
-
-		size = aim_node->size;
-		aim_node->used = 0;
-		aim_node->next = var_region->vfirst;
-		if(var_region->vfirst)
-			var_region->vfirst->last = aim_node;
-		var_region->vfirst = aim_node;
-
-		return;
 	}
 	else
 	{

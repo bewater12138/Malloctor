@@ -72,6 +72,11 @@ struct VarBlockHead
 	struct VarBlockHead* last;
 	struct VarBlockHead* next;
 };
+struct VarBlockRegionVirtualNodes
+{
+	struct VarBlockHead virtual_first;
+	struct VarBlockHead virtual_last;
+};
 INLINE_FUNC void RemoveVarBlockHead_Unchecked(struct VarBlockHead* vbh)
 {
 	vbh->last->next = vbh->next;
@@ -142,10 +147,8 @@ typedef void(*Callback_AddrTransborder)(struct Heap* heap, PTR addr);
 typedef void(*Callback_IncreaseHeap)(struct Heap* heap, PTR new_region_addr, SIZE new_region_size, SIZE block_size);
 typedef void(*Callback_RegionTableOverflow)(struct Heap* heap);
 typedef void(*Callback_FailedMalloc)(struct Heap* heap, SIZE size);
-/*
-apply_size:申请的增量
-返回值:允许的增量
-*/
+/*apply_size:申请的增量
+返回值:允许的增量*/
 typedef SIZE(*Callback_FailedIncreaseHeap)(struct Heap* heap, SIZE heap_size, SIZE apply_size);
 
 /*
@@ -173,6 +176,11 @@ struct Heap
 	struct Array regions;
 
 	/*
+	变长内存区域中，内存块链表的虚拟首部和尾部
+	*/
+	struct VarBlockRegionVirtualNodes vnodes;
+
+	/*
 	Element Type: Addr2Region
 	内存地址到内存区域的映射表
 	以分区起始地址为序
@@ -192,7 +200,8 @@ struct Heap
 
 enum HeapType
 {
-	HeapType_Default = 0,
+	HeapType_Default = 0,	//默认
+	HeapType_64B = 1,		//定长块只有64字节区（占比1/2）
 };
 
 #define HeapSizeTooLess		1	//内存过少
