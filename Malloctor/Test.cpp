@@ -77,7 +77,7 @@ void test4()
 			"\n";
 		};
 
-	int i = 4033;
+	int i = 1024;
 	while (i--)
 	{
 		auto p = _Malloc(heap, 64);

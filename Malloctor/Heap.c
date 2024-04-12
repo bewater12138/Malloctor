@@ -131,6 +131,11 @@ EXTERN_FUNC INT ConstructHeap(PTR addr, SIZE heap_size, enum HeapType t)
 		every_region_block_size[7] = dynamicSize;
 	}
 		break;
+		/*
+				块大小	区域占比
+				64		1/2
+				大于64	1/2
+		*/
 	case HeapType_64B: {
 		region_count = 2;
 		h->maxBlockSize = 64;
